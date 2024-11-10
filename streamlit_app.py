@@ -1,151 +1,163 @@
 import streamlit as st
 import pandas as pd
-import math
-from pathlib import Path
+import matplotlib.pyplot as plt
+import seaborn as sns
 
-# Set the title and favicon that appear in the Browser's tab bar.
-st.set_page_config(
-    page_title='GDP dashboard',
-    page_icon=':earth_americas:', # This is an emoji shortcode. Could be a URL too.
-)
+# Set up page configuration
+st.set_page_config(page_title="Sales Dashboard", layout="wide")
 
-# -----------------------------------------------------------------------------
-# Declare some useful functions.
+# Load data
+@st.cache
+def load_data():
+    product_df = pd.read_excel('data/Product.xlsx')
+    sales_df = pd.read_excel('data/SalesData.xlsx')
+    return product_df, sales_df
 
-@st.cache_data
-def get_gdp_data():
-    """Grab GDP data from a CSV file.
+product_df, sales_df = load_data()
 
-    This uses caching to avoid having to read the file every time. If we were
-    reading from an HTTP endpoint instead of a file, it's a good idea to set
-    a maximum age to the cache with the TTL argument: @st.cache_data(ttl='1d')
-    """
+# Merge Data
+merged_df = pd.merge(sales_df, product_df, left_on='ProductKey', right_on='ID')
+merged_df['SalesAmount'] = merged_df['Quantity'] * merged_df['UnitPrice']
 
-    # Instead of a CSV on disk, you could read from an HTTP endpoint here too.
-    DATA_FILENAME = Path(__file__).parent/'data/gdp_data.csv'
-    raw_gdp_df = pd.read_csv(DATA_FILENAME)
+# Set seaborn style
+sns.set(style="whitegrid")
 
-    MIN_YEAR = 1960
-    MAX_YEAR = 2022
+# Dashboard title
+st.title("Sales Dashboard")
 
-    # The data above has columns like:
-    # - Country Name
-    # - Country Code
-    # - [Stuff I don't care about]
-    # - GDP for 1960
-    # - GDP for 1961
-    # - GDP for 1962
-    # - ...
-    # - GDP for 2022
-    #
-    # ...but I want this instead:
-    # - Country Name
-    # - Country Code
-    # - Year
-    # - GDP
-    #
-    # So let's pivot all those year-columns into two: Year and GDP
-    gdp_df = raw_gdp_df.melt(
-        ['Country Code'],
-        [str(x) for x in range(MIN_YEAR, MAX_YEAR + 1)],
-        'Year',
-        'GDP',
-    )
+# 1. Calculate the Sales Amount for each transaction
+st.subheader("Sales Amount per Transaction")
+st.write(merged_df[['OrderNumber', 'SalesAmount']])
 
-    # Convert years from string to integers
-    gdp_df['Year'] = pd.to_numeric(gdp_df['Year'])
+# 2. Total revenue, total orders, and average order value
+total_revenue = merged_df['SalesAmount'].sum()
+total_orders = merged_df['OrderNumber'].nunique()
+average_order_value = total_revenue / total_orders
 
-    return gdp_df
+st.subheader("Summary Statistics")
+st.metric("Total Revenue", f"${total_revenue:,.2f}")
+st.metric("Total Orders", total_orders)
+st.metric("Average Order Value", f"${average_order_value:,.2f}")
 
-gdp_df = get_gdp_data()
+# 3. Revenue by Channel
+st.subheader("Revenue by Sales Channel")
+fig, ax = plt.subplots(figsize=(10, 6))
+sns.barplot(data=merged_df, x='Channel', y='SalesAmount', estimator=sum, errorbar=None, ax=ax)
+ax.set_title("Revenue by Sales Channel")
+ax.set_ylabel("Total Revenue")
+st.pyplot(fig)
 
-# -----------------------------------------------------------------------------
-# Draw the actual page
+# Revenue by Product Category
+st.subheader("Revenue by Product Category")
+fig, ax = plt.subplots(figsize=(10, 6))
+sns.barplot(data=merged_df, x='ProductCategory', y='SalesAmount', estimator=sum, errorbar=None, ax=ax)
+ax.set_title("Revenue by Product Category")
+ax.set_ylabel("Total Revenue")
+plt.xticks(rotation=45)
+st.pyplot(fig)
 
-# Set the title that appears at the top of the page.
-'''
-# :earth_americas: GDP dashboard
+# Pie chart for Revenue by Product Category
+st.subheader("Revenue Distribution by Product Category")
+category_revenue = merged_df.groupby('ProductCategory')['SalesAmount'].sum()
+fig, ax = plt.subplots(figsize=(8, 8))
+ax.pie(category_revenue, labels=category_revenue.index, autopct='%1.1f%%', startangle=140)
+ax.set_title("Revenue Distribution by Product Category")
+st.pyplot(fig)
 
-Browse GDP data from the [World Bank Open Data](https://data.worldbank.org/) website. As you'll
-notice, the data only goes to 2022 right now, and datapoints for certain years are often missing.
-But it's otherwise a great (and did I mention _free_?) source of data.
-'''
+# Revenue by Product Group
+st.subheader("Revenue by Product Group")
+fig, ax = plt.subplots(figsize=(10, 6))
+sns.barplot(data=merged_df, x='ProductGroup', y='SalesAmount', estimator=sum, errorbar=None, ax=ax)
+ax.set_title("Revenue by Product Group")
+ax.set_ylabel("Total Revenue")
+plt.xticks(rotation=45)
+st.pyplot(fig)
 
-# Add some spacing
-''
-''
+# Revenue by Salesperson
+st.subheader("Revenue by Salesperson")
+fig, ax = plt.subplots(figsize=(10, 6))
+sns.barplot(data=merged_df, x='Salesperson', y='SalesAmount', estimator=sum, errorbar=None, ax=ax)
+ax.set_title("Revenue by Salesperson")
+ax.set_ylabel("Total Revenue")
+plt.xticks(rotation=45)
+st.pyplot(fig)
 
-min_value = gdp_df['Year'].min()
-max_value = gdp_df['Year'].max()
+# 4. Orders by Product Category
+st.subheader("Number of Orders by Product Category")
+fig, ax = plt.subplots(figsize=(10, 6))
+sns.countplot(data=merged_df, x='ProductCategory', ax=ax)
+ax.set_title("Number of Orders by Product Category")
+ax.set_ylabel("Total Orders")
+plt.xticks(rotation=45)
+st.pyplot(fig)
 
-from_year, to_year = st.slider(
-    'Which years are you interested in?',
-    min_value=min_value,
-    max_value=max_value,
-    value=[min_value, max_value])
+# Orders by Salesperson
+st.subheader("Number of Orders by Salesperson")
+fig, ax = plt.subplots(figsize=(10, 6))
+sns.countplot(data=merged_df, x='Salesperson', ax=ax)
+ax.set_title("Number of Orders by Salesperson")
+ax.set_ylabel("Total Orders")
+plt.xticks(rotation=45)
+st.pyplot(fig)
 
-countries = gdp_df['Country Code'].unique()
+# 5. Revenue per Quarter and Month
+merged_df['OrderDate'] = pd.to_datetime(merged_df['OrderDate'])
+merged_df['Quarter'] = merged_df['OrderDate'].dt.to_period("Q")
+merged_df['Month'] = merged_df['OrderDate'].dt.to_period("M")
 
-if not len(countries):
-    st.warning("Select at least one country")
+# Revenue by Quarter
+st.subheader("Revenue by Quarter")
+fig, ax = plt.subplots(figsize=(10, 6))
+sns.barplot(data=merged_df, x='Quarter', y='SalesAmount', estimator=sum, errorbar=None, ax=ax)
+ax.set_title("Revenue by Quarter")
+ax.set_ylabel("Total Revenue")
+plt.xticks(rotation=45)
+st.pyplot(fig)
 
-selected_countries = st.multiselect(
-    'Which countries would you like to view?',
-    countries,
-    ['DEU', 'FRA', 'GBR', 'BRA', 'MEX', 'JPN'])
+# Revenue by Month
+st.subheader("Revenue by Month")
+fig, ax = plt.subplots(figsize=(10, 6))
+sns.barplot(data=merged_df, x='Month', y='SalesAmount', estimator=sum, errorbar=None, ax=ax)
+ax.set_title("Revenue by Month")
+ax.set_ylabel("Total Revenue")
+plt.xticks(rotation=45)
+st.pyplot(fig)
 
-''
-''
-''
+# 6. Salesperson Performance: Total Orders, Average Order Value, and Total Revenue
+salesperson_summary = merged_df.groupby('Salesperson').agg({
+    'SalesAmount': ['sum', 'mean'],
+    'OrderNumber': 'nunique'
+}).reset_index()
+salesperson_summary.columns = ['Salesperson', 'TotalRevenue', 'AverageOrderValue', 'TotalOrders']
 
-# Filter the data
-filtered_gdp_df = gdp_df[
-    (gdp_df['Country Code'].isin(selected_countries))
-    & (gdp_df['Year'] <= to_year)
-    & (from_year <= gdp_df['Year'])
-]
+# Plot: Total Revenue by Salesperson
+st.subheader("Total Revenue by Salesperson")
+fig, ax = plt.subplots(figsize=(10, 6))
+sns.barplot(data=salesperson_summary, x='Salesperson', y='TotalRevenue', errorbar=None, ax=ax)
+ax.set_title("Total Revenue by Salesperson")
+ax.set_ylabel("Total Revenue")
+plt.xticks(rotation=45)
+st.pyplot(fig)
 
-st.header('GDP over time', divider='gray')
+# Plot: Average Order Value by Salesperson
+st.subheader("Average Order Value by Salesperson")
+fig, ax = plt.subplots(figsize=(10, 6))
+sns.barplot(data=salesperson_summary, x='Salesperson', y='AverageOrderValue', errorbar=None, ax=ax)
+ax.set_title("Average Order Value by Salesperson")
+ax.set_ylabel("Average Order Value")
+plt.xticks(rotation=45)
+st.pyplot(fig)
 
-''
+# Plot: Total Orders by Salesperson
+st.subheader("Total Orders by Salesperson")
+fig, ax = plt.subplots(figsize=(10, 6))
+sns.barplot(data=salesperson_summary, x='Salesperson', y='TotalOrders', errorbar=None, ax=ax)
+ax.set_title("Total Orders by Salesperson")
+ax.set_ylabel("Total Orders")
+plt.xticks(rotation=45)
+st.pyplot(fig)
 
-st.line_chart(
-    filtered_gdp_df,
-    x='Year',
-    y='GDP',
-    color='Country Code',
-)
-
-''
-''
-
-
-first_year = gdp_df[gdp_df['Year'] == from_year]
-last_year = gdp_df[gdp_df['Year'] == to_year]
-
-st.header(f'GDP in {to_year}', divider='gray')
-
-''
-
-cols = st.columns(4)
-
-for i, country in enumerate(selected_countries):
-    col = cols[i % len(cols)]
-
-    with col:
-        first_gdp = first_year[first_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-        last_gdp = last_year[last_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-
-        if math.isnan(first_gdp):
-            growth = 'n/a'
-            delta_color = 'off'
-        else:
-            growth = f'{last_gdp / first_gdp:,.2f}x'
-            delta_color = 'normal'
-
-        st.metric(
-            label=f'{country} GDP',
-            value=f'{last_gdp:,.0f}B',
-            delta=growth,
-            delta_color=delta_color
-        )
+# Display top salesperson by revenue
+top_salesperson = salesperson_summary.loc[salesperson_summary['TotalRevenue'].idxmax()]
+st.subheader("Top Salesperson by Revenue")
+st.write(f"Top Salesperson by Revenue: {top_salesperson['Salesperson']}, Revenue: ${top_salesperson['TotalRevenue']:,.2f}")
